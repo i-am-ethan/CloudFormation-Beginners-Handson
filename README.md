@@ -1,5 +1,5 @@
 # CloudFormation-Beginners-Handson
-CloudFormation入門者用のハンズオンで作成したテンプレートファイルです。
+CloudFormation入門者用のハンズオンを改良したテンプレートファイルです。
 ![サムネイル](./img.jpg)
 
 ## 概要
