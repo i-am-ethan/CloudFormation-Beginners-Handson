@@ -1,0 +1,248 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: TestCfnTemplate
+Parameters:
+  # セキュリティグループで設定する許可されたIPアドレスを指定する
+  # ====================================================
+  AllowedIP:
+    Type: String
+    Description: Allowed IP Address
+    Default: 0.0.0.0/0
+Resources: 
+  # VPC
+  # ====================================================
+  testVPC: #論理ID
+    Type: AWS::EC2::VPC #リソースタイプ
+    Properties: #プロパティ
+      CidrBlock: 10.0.0.0/16 #CIDRブロック
+      EnableDnsSupport: true #DNSサポート
+      Tags: #タグ
+        - Key: Name
+          Value: CFN_TEST_VPC
+  # subnet
+  # ====================================================
+  testPrivateSubnet: #論理ID
+    Type: AWS::EC2::Subnet #リソースタイプ
+    Properties: #プロパティ
+      AvailabilityZone: ap-northeast-1a #AZ
+      VpcId: !Ref testVPC #VPCの参照
+      CidrBlock: 10.0.1.0/24 #CIDRブロック
+      Tags: #タグ
+        - Key: Name
+          Value: CFN_TEST_PRIVATE_SUBNET
+  # subnet
+  # ====================================================
+  testPublicSubnet: #論理ID
+    Type: AWS::EC2::Subnet #リソースタイプ
+    Properties: #プロパティ
+      AvailabilityZone: ap-northeast-1a #AZ
+      VpcId: !Ref testVPC #VPCの参照
+      CidrBlock: 10.0.2.0/24 #CIDRブロック
+      Tags: #タグ
+        - Key: Name
+          Value: CFN_TEST_PUBLIC_SUBNET
+  # セキュリティグループ(パブリックサブネット内のEC2)
+  # ====================================================
+  PublicInstanceSecGroup: #論理ID
+    Type: AWS::EC2::SecurityGroup #リソースタイプ
+    Properties: #プロパティ
+      GroupName: testSG_1 #セキュリティグループ名
+      GroupDescription: testSG_1 #セキュリティグループ説明
+      VpcId: !Ref testVPC #VPCの参照
+      SecurityGroupIngress: #セキュリティグループのインバウンドルール
+        - IpProtocol: tcp #プロトコル
+          FromPort: 22 #ポート
+          ToPort: 22 #ポート
+          CidrIp: !Sub ${AllowedIP}  #許可されたIPアドレスを変数として指定(スタック作成時にパラメータで指定する)
+      Tags: #タグ
+        - Key: Name
+          Value: CFN_TEST_SG
+  # セキュリティグループ(プライベートサブネット内のEC2)
+  # ====================================================
+  PrivateInstanceSecGroup: #論理ID
+    Type: AWS::EC2::SecurityGroup #リソースタイプ
+    Properties: #プロパティ
+      GroupName: testSG_2 #セキュリティグループ名
+      GroupDescription: testSG_2 #セキュリティグループ説明
+      VpcId: !Ref testVPC #VPCの参照
+      SecurityGroupIngress: #セキュリティグループのインバウンドルール
+        - IpProtocol: tcp #プロトコル
+          FromPort: 22 #ポート
+          ToPort: 22 #ポート
+          SourceSecurityGroupId: !Ref PublicInstanceSecGroup #PublicInstanceSecGroupからのSSH接続のみを許可する
+      Tags: #タグ
+        - Key: Name
+          Value: CFN_TEST_SG
+  # networkACL
+  # ====================================================
+  testNetworkAclPublic: #論理ID
+    Type: AWS::EC2::NetworkAcl #リソースタイプ
+    Properties: #プロパティ
+      VpcId: !Ref testVPC #VPCの参照
+      Tags: #タグ
+        - Key: Name
+          Value: CFN_TEST_NETWORK_ACL_PUBLIC
+  testNetworkAclPrivate: #論理ID
+    Type: AWS::EC2::NetworkAcl #リソースタイプ
+    Properties: #プロパティ
+      VpcId: !Ref testVPC #VPCの参照
+      Tags: #タグ
+        - Key: Name
+          Value: CFN_TEST_NETWORK_ACL_PRIVATE
+  # networkACLとsubnetの関連づけ
+  # ====================================================
+  testNetworkAssocPublic:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref testPublicSubnet
+      NetworkAclId: !Ref testNetworkAclPublic
+  testNetworkAssocPrivate:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref testPrivateSubnet
+      NetworkAclId: !Ref testNetworkAclPrivate
+  # NACLのインバウンドルールインターネットからのSSHのみ許可する（パブリックサブネット）
+  # ====================================================
+  testACLInRulePublicSSH:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      Egress: false #インバウンドルール
+      RuleNumber: 100 #ルール番号
+      RuleAction: allow #ルールアクション
+      Protocol: 6 #TCP
+      PortRange:
+        From: 22 #ポート
+        To: 22 #ポート
+      CidrBlock: !Sub ${AllowedIP} #許可されたIPアドレスからのみ
+      NetworkAclId: !Ref testNetworkAclPublic #NACLの参照
+  # NACLのインバウンドルールプライベートサブネットからの全てのTCPを許可する（パブリックサブネット）
+  # ====================================================
+  testACLInRulePublicSSHFromPrivate:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      Egress: false # インバウンドルール
+      RuleNumber: 120 # ルール番号
+      RuleAction: allow # ルールアクション
+      Protocol: 6 # TCP
+      PortRange:
+        From: 0 # ポート
+        To: 65535 # ポート
+      CidrBlock: 10.0.1.0/24 # プライベートサブネットのCIDRブロック
+      NetworkAclId: !Ref testNetworkAclPublic # NACLの参照
+  # NACLのアウトバンドルール全許可(パブリックサブネット)
+  # ====================================================
+  testAclOutRulePublic:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      Egress: true #アウトバンドルール
+      RuleNumber: 100 #ルール番号
+      RuleAction: allow #ルールアクション
+      Protocol: -1 #プロトコル
+      CidrBlock: 0.0.0.0/0
+      NetworkAclId: !Ref testNetworkAclPublic #NACLの参照
+  # NACLのインバウンドルール全許可（プライベートサブネット）
+  # ====================================================
+  testAclInRulePrivate:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      Egress: false #インバウンドルール
+      RuleNumber: 100 #ルール番号
+      RuleAction: allow #ルールアクション
+      Protocol: -1 #プロトコル
+      CidrBlock: 0.0.0.0/0
+      NetworkAclId: !Ref testNetworkAclPrivate #NACLの参照
+  # NACLのアウトバウンドルール全許可（プライベートサブネット）
+  # ====================================================
+  testAclOutRulePrivate:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      Egress: true #アウトバウンドルール
+      RuleNumber: 100 #ルール番号
+      RuleAction: allow #ルールアクション
+      Protocol: -1 #プロトコル
+      CidrBlock: 0.0.0.0/0
+      NetworkAclId: !Ref testNetworkAclPrivate #NACLの参照
+  # ルートテーブルの作成
+  # ====================================================
+  testRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref testVPC
+      Tags:
+        - Key: Name
+          Value: CFN_TEST_ROUTE_TABLE
+  # ルートテーブルのルート設定
+  # ====================================================
+  testRouteSetting:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref testRouteTable
+      DestinationCidrBlock: 0.0.0.0/0 #デフォルトゲートウェイ
+      GatewayId: !Ref testIGW #インターネットゲートウェイの参照
+  # ルートテーブルとパブリックサブネットの関連付け
+  # ====================================================
+  testRouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref testPublicSubnet
+      RouteTableId: !Ref testRouteTable
+  # インターネットゲートウェイの作成
+  # ====================================================
+  testIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: CFN_TEST_IGW
+  # インターネットゲートウェイとVPCの関連付け
+  # ====================================================
+  testAttachIGW:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref testVPC
+      InternetGatewayId: !Ref testIGW
+  # インスタンスの作成(パブリックサブネット内)
+  # t2.micro
+  # ====================================================
+  testEC2InstancePublic:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: testkeypair
+      DisableApiTermination: false #API終了時のサービス停止
+      ImageId: ami-0e347cff037f057c4 #Amazon Linux 2 Kernel 5.10 AMI 2.0.20231218.0 x86_64 HVM gp2
+      InstanceType: t2.micro
+      Monitoring: false #モニタリング
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true #パブリックIPアドレスの割り当て
+          DeviceIndex: "0" #デバイスインデックス
+          SubnetId: !Ref testPublicSubnet #サブネットの参照
+          GroupSet:
+            - !Ref PublicInstanceSecGroup #セキュリティグループの参照
+      Tags:
+        - Key: Name
+          Value: CFN_TEST_PUBLIC_INSTANCE
+  # Elastic IPの作成
+  # ====================================================
+  testEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref testEC2InstancePublic
+  # インスタンスの作成(プライベートサブネット内)
+  # t2.micro
+  # ====================================================
+  testEC2InstancePrivate:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: testkeypair
+      DisableApiTermination: false
+      ImageId: ami-0e347cff037f057c4 #Amazon Linux 2 Kernel 5.10 AMI 2.0.20231218.0 x86_64 HVM gp2
+      InstanceType: t2.micro
+      Monitoring: false
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeviceIndex: "0"
+          SubnetId: !Ref testPrivateSubnet
+          GroupSet:
+            - !Ref PrivateInstanceSecGroup
+      Tags:
+        - Key: Name
+          Value: CFN_TEST_PRIVATE_INSTANCE
