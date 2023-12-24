@@ -30,15 +30,15 @@ https://devlog.neton.co.jp/middleware/cloudformation/
 ## 動作確認に使用するコマンド
 最終的に、プライベートサブネット内のEC2インスタンスにSSH接続するために使用するコマンドです。
 
-```
+```Bash
 
 # ホストマシンからリモートマシンにpemファイルを転送する
 scp -i testkeypair.pem -r testkeypair.pem ec2-user@<Elastic IP Address>:/tmp
 
-パブリックサブネットにssh接続する
+# パブリックサブネットにssh接続する
 ssh -i testkeypair.pem ec2-user@<Elastic IP Address>
 
-プライベートサブネットにssh接続する
+# プライベートサブネットにssh接続する
 ssh -i /tmp/testkeypair.pem ec2-user@<Private IP Address>
 
 ```
