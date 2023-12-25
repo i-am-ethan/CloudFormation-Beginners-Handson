@@ -7,6 +7,9 @@ Parameters:
     Type: String
     Description: Allowed IP Address
     Default: 0.0.0.0/0
+  EC2ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-kernel-5.10-hvm-x86_64-gp2"
 Resources: 
   # VPC
   # ====================================================
@@ -208,7 +211,7 @@ Resources:
     Properties:
       KeyName: testkeypair
       DisableApiTermination: false #API終了時のサービス停止
-      ImageId: ami-0e347cff037f057c4 #Amazon Linux 2 Kernel 5.10 AMI 2.0.20231218.0 x86_64 HVM gp2
+      ImageId: !Ref EC2ImageId
       InstanceType: t2.micro
       Monitoring: false #モニタリング
       NetworkInterfaces:
@@ -234,7 +237,7 @@ Resources:
     Properties:
       KeyName: testkeypair
       DisableApiTermination: false
-      ImageId: ami-0e347cff037f057c4 #Amazon Linux 2 Kernel 5.10 AMI 2.0.20231218.0 x86_64 HVM gp2
+      ImageId: !Ref EC2ImageId
       InstanceType: t2.micro
       Monitoring: false
       NetworkInterfaces:
