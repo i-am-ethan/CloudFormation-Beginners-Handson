@@ -43,3 +43,44 @@ ssh -i /tmp/testkeypair.pem ec2-user@<Private IP Address>
 
 ```
 
+## 追記：自動で新しいami-idを取得するように変更
+ami nameの探し方
+1. AWS CLI を使用してパブリックパラメータを検索する
+https://docs.aws.amazon.com/ja_jp/systems-manager/latest/userguide/parameter-store-finding-public-parameters.html
+<br>
+``` bash
+aws ssm get-parameters-by-path --path /aws/service/list
+```
+以下のような結果が得られる。
+```bash
+{
+  "Name": "/aws/service/list/ami-amazon-linux-latest",
+  "Type": "String",
+  "Value": "/aws/service/ami-amazon-linux-latest/",
+  "Version": 1,
+  "LastModifiedDate": "2021-03-12T08:07:37.393000+09:00",
+  "ARN": "arn:aws:ssm:ap-northeast-1::parameter/aws/service/list/ami-amazon-linux-latest",
+  "DataType": "text"
+},
+```
+2. 上記をもとにさらに検索する。
+```bash
+aws ssm describe-parameters --parameter-filters "Key=Name, Option=BeginsWith, Values=/aws/service/ami-amazon-linux-latest/" --region ap-northeast-1
+```
+
+以下のような結果が得られる。
+
+```bash
+{
+  "Name": "/aws/service/ami-amazon-linux-latest/amzn2-ami-kernel-5.10-hvm-x8
+6_64-gp2",
+  "Type": "String",
+  "LastModifiedDate": "2023-12-20T03:21:22.578000+09:00",
+  "Version": 56,
+  "Tier": "Standard",
+  "Policies": [],
+  "DataType": "text"
+},
+```
+上記のNameをもとに、ami-idを取得する。
+
